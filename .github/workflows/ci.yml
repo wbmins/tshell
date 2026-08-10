@@ -56,3 +56,10 @@ jobs:
       - name: Build (release)
         # We build in release mode so that the release workflow can reuse the exact artifacts
         run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            target/${{ matrix.target }}/release/ashell*
