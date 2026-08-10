@@ -292,7 +292,7 @@ pub(crate) struct Ashell {
     pub(crate) config: ConfigStore,
     pub(crate) active_title_bar_style: crate::session::config::TitleBarStyle,
     pub(crate) cursor_style: crate::session::config::CursorStyle,
-    pub(crate) system_sampler: SystemSampler,
+    pub(crate) system_sampler: Option<SystemSampler>,
     pub(crate) recording_action: Option<String>,
     pub(crate) active_dialog: Option<DialogKind>,
     /// Error message when a recorded keybinding conflicts with another
@@ -552,8 +552,15 @@ impl Ashell {
         let (events_tx, events_rx) = mpsc::channel();
         let workspace_panels = cx.new(|_| ResizableState::default());
         let body_panels = cx.new(|_| ResizableState::default());
-        let mut system_sampler = SystemSampler::new();
-        let system = system_sampler.sample();
+        let mut system_sampler = if config.show_hardware_info() {
+            Some(SystemSampler::new())
+        } else {
+            None
+        };
+        let system = system_sampler
+            .as_mut()
+            .map(|sampler| sampler.sample())
+            .unwrap_or_default();
         let t5 = Instant::now();
         startup::startup_mark("Ashell::new: panels + system sampler", t4, t5);
         let default_light_theme_name = ThemeRegistry::global(cx).default_light_theme().name.clone();
@@ -1165,6 +1172,9 @@ impl Ashell {
     }
 
     pub(crate) fn sample_system_if_due(&mut self) -> bool {
+        if !self.config.show_hardware_info() {
+            return false;
+        }
         if self.last_system_sample.elapsed() >= SystemSampler::interval() {
             self.last_system_sample = Instant::now();
             // Use system_tab_id (not active_tab) to decide remote vs local sampling
@@ -1179,7 +1189,11 @@ impl Ashell {
                     return false;
                 }
             }
-            let snapshot = self.system_sampler.sample();
+            let snapshot = self
+                .system_sampler
+                .as_mut()
+                .map(|sampler| sampler.sample())
+                .unwrap_or_default();
             let cpu_usage = snapshot.cpu_percent;
             self.cpu_history.push(cpu_usage);
             if self.cpu_history.len() > 20 {

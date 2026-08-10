@@ -131,6 +131,8 @@ zombie_reason: "此传输任务因程序退出而中断，传输进程已不存�
 
 retry: "重试"
 right_click_copy_paste: "右键复制/粘贴"
+show_hardware_info: "硬件信息"
+show_hardware_info_hint: "在左侧侧边栏显示 CPU、内存、Swap、磁盘等硬件信息。"
 keyword_highlight: "终端关键词高亮"
 lock_layout: "锁定窗口布局"
 lock_layout_hint: "锁定侧边栏和 SFTP 面板的位置。"

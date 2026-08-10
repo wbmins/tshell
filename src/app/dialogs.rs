@@ -1816,6 +1816,34 @@ impl Ashell {
                                                 .title(t!("settings_group_other").to_string())
                                                 .item(
                                                     SettingItem::new(
+                                                        t!("show_hardware_info").to_string(),
+                                                        SettingField::render({
+                                                            let view = view_clone_for_general.clone();
+                                                            move |_, window, cx| {
+                                                                Switch::new("show-hardware-info")
+                                                                    .small()
+                                                                    .checked(view.read(cx).config.show_hardware_info())
+                                                                    .on_click(window.listener_for(&view, |this, checked, _, cx| {
+                                                                        this.config.set_show_hardware_info(*checked);
+                                                                        if *checked && this.system_sampler.is_none() {
+                                                                            this.system_sampler =
+                                                                                Some(crate::system::SystemSampler::new());
+                                                                            this.system = this
+                                                                                .system_sampler
+                                                                                .as_mut()
+                                                                                .map(|sampler| sampler.sample())
+                                                                                .unwrap_or_default();
+                                                                        }
+                                                                        this.save_preferences_background();
+                                                                        cx.notify();
+                                                                    }))
+                                                                    .into_any_element()
+                                                            }
+                                                        })
+                                                    ).description(t!("show_hardware_info_hint").to_string())
+                                                )
+                                                .item(
+                                                    SettingItem::new(
                                                         t!("right_click_copy_paste").to_string(),
                                                         SettingField::render({
                                                             let view = view_clone_for_general.clone();

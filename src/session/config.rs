@@ -203,6 +203,8 @@ pub struct ConfigFile {
     #[serde(default)]
     pub right_click_copy_paste: bool,
     #[serde(default)]
+    pub show_hardware_info: bool,
+    #[serde(default)]
     pub keyword_highlight: bool,
     #[serde(default = "default_ui_font_family")]
     pub ui_font_family: String,
@@ -328,6 +330,7 @@ impl Default for ConfigFile {
             terminal_font_size: default_terminal_font_size(),
             ui_font_size: default_ui_font_size(),
             right_click_copy_paste: false,
+            show_hardware_info: false,
             keyword_highlight: false,
             ui_font_family: default_ui_font_family(),
             terminal_font_family: default_terminal_font_family(),
@@ -683,6 +686,14 @@ impl ConfigStore {
         self.cache.right_click_copy_paste = val;
     }
 
+    pub fn show_hardware_info(&self) -> bool {
+        self.cache.show_hardware_info
+    }
+
+    pub fn set_show_hardware_info(&mut self, val: bool) {
+        self.cache.show_hardware_info = val;
+    }
+
     pub fn keyword_highlight(&self) -> bool {
         self.cache.keyword_highlight
     }
@@ -861,6 +872,7 @@ impl ConfigStore {
         disk_config.terminal_font_size = local_config.terminal_font_size;
         disk_config.ui_font_size = local_config.ui_font_size;
         disk_config.right_click_copy_paste = local_config.right_click_copy_paste;
+        disk_config.show_hardware_info = local_config.show_hardware_info;
         disk_config.keyword_highlight = local_config.keyword_highlight;
         disk_config.ui_font_family = local_config.ui_font_family;
         disk_config.terminal_font_family = local_config.terminal_font_family;
