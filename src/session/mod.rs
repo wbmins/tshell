@@ -587,6 +587,12 @@ impl Ashell {
             cx.notify();
             return;
         };
+        tracing::debug!(
+            "[ui] connect_saved_session: got session protocol={} host={} user={}",
+            session.protocol,
+            session.host,
+            session.user
+        );
         if session.protocol == "serial" {
             self.open_serial_session(session, cx);
         } else if session.protocol == "wsl" {
@@ -594,6 +600,66 @@ impl Ashell {
         } else {
             self.open_ssh_session(session, cx);
         }
+
+        // Detect the OS running inside the connected session (async) so the
+        // session list can show the matching distro icon.
+        self.detect_session_os_async(session_id, cx);
+    }
+
+    /// Asynchronously detect the OS type of a session and cache it so the
+    /// session list can display the matching distro icon.
+    pub(crate) fn detect_session_os_async(&self, session_id: String, cx: &mut Context<Self>) {
+        let Some(session) = self.config.get(&session_id).cloned() else {
+            return;
+        };
+
+        // Avoid re-detecting if we already know the OS.
+        if self.session_os_types.contains_key(&session_id) {
+            return;
+        }
+
+        let weak = cx.weak_entity();
+        let rt = self.runtime.handle().clone();
+        cx.spawn(async move |_this, cx| {
+            let os = cx
+                .background_executor()
+                .spawn(async move {
+                    let rt = rt.clone();
+                    crate::system::os::detect_session_os(&session, &rt)
+                })
+                .await;
+
+            let _ = weak.update(cx, |this, cx| {
+                let existing = this
+                    .config
+                    .get(&session_id)
+                    .map(|s| s.os_type.clone())
+                    .unwrap_or_default();
+
+                // If detection failed (unknown) but we already know the OS,
+                // keep the previous icon instead of clearing it. A single
+                // unreachable connection shouldn't wipe the saved icon.
+                if os != "unknown" {
+                    this.session_os_types.insert(session_id.clone(), os.clone());
+                    // Persist the detected OS so the distro icon survives
+                    // restarts.
+                    if let Some(mut s) = this.config.get(&session_id).cloned() {
+                        if s.os_type != os {
+                            s.os_type = os;
+                            this.config.upsert(s);
+                            let _ = this.config.save();
+                        }
+                    }
+                } else if !existing.is_empty() {
+                    // Keep the previously saved icon in the runtime cache too.
+                    this.session_os_types
+                        .insert(session_id.clone(), existing);
+                }
+                cx.notify();
+            });
+            Ok::<(), anyhow::Error>(())
+        })
+        .detach();
     }
 
     pub(crate) fn selector_entries(&self) -> Vec<SelectorEntry> {

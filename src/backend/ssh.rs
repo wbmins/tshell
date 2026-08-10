@@ -55,6 +55,44 @@ pub fn spawn_ssh_terminal(
     BackendTx::Ssh(cmd_tx)
 }
 
+/// Execute a one-off command on the remote host and capture its stdout.
+///
+/// Uses the in-process russh client (same as the interactive terminal) so no
+/// separate `ssh.exe` process — and therefore no extra cmd window — is spawned.
+pub async fn execute_remote_command(session: &Session, command: &str) -> Result<String> {
+    let (_tx, _rx) = std::sync::mpsc::channel::<BackendEvent>();
+    let handle = connect_and_authenticate("os-detect", session, &_tx).await?;
+    let handle = Arc::new(tokio::sync::Mutex::new(handle));
+
+    let mut channel = handle
+        .lock()
+        .await
+        .channel_open_session()
+        .await
+        .context("open os-detect session")?;
+    channel
+        .exec(true, command)
+        .await
+        .context("exec os-detect command")?;
+
+    let mut stdout = Vec::new();
+    while let Some(msg) = channel.wait().await {
+        match msg {
+            ChannelMsg::Data { data } | ChannelMsg::ExtendedData { data, ext: _ } => {
+                stdout.extend_from_slice(&data);
+            }
+            ChannelMsg::Close => break,
+            _ => {}
+        }
+    }
+
+    let _ = handle
+        .lock()
+        .await
+        .disconnect(Disconnect::ByApplication, "", "os-detect");
+    Ok(String::from_utf8_lossy(&stdout).into_owned())
+}
+
 async fn sample_remote_system_with_handle(
     handle: Arc<tokio::sync::Mutex<russh::client::Handle<ClientHandler>>>,
 ) -> Result<SystemSnapshot> {

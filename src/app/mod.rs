@@ -321,6 +321,9 @@ pub(crate) struct Ashell {
     pub(crate) sftp_handles: std::collections::HashMap<String, crate::sftp::SftpHandle>,
 
     pub(crate) remote_sample_in_flight: bool,
+    /// Cache of detected OS type keyed by session id (e.g. "debian",
+    /// "ubuntu", "alpine", "android", "arch", or "unknown").
+    pub(crate) session_os_types: HashMap<String, String>,
     pub(crate) runtime: Runtime,
     pub(crate) events_rx: mpsc::Receiver<BackendEvent>,
     pub(crate) events_tx: mpsc::Sender<BackendEvent>,
@@ -742,6 +745,7 @@ impl Ashell {
             sftp_handles: std::collections::HashMap::new(),
 
             remote_sample_in_flight: false,
+            session_os_types: HashMap::new(),
             runtime,
             events_rx,
             events_tx,

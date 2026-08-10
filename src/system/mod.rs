@@ -1,3 +1,4 @@
+pub mod os;
 pub mod wsl;
 
 use std::{

@@ -20,6 +20,12 @@ const CUSTOM_ICON_PATHS: &[&str] = &[
     "icons/file-up.svg",
     "icons/refresh-ccw.svg",
     "icons/trash-2.svg",
+    "icons/debian-icon.svg",
+    "icons/ubuntu-icon.svg",
+    "icons/alpinelinux-icon.svg",
+    "icons/android-icon.svg",
+    "icons/archlinux-icon.svg",
+    "icons/postmarketos-icon.svg",
 ];
 
 /// Asset source serving the app's custom icons, falling back to
@@ -39,6 +45,24 @@ impl AssetSource for Assets {
                 }
                 "icons/trash-2.svg" => {
                     include_bytes!("../../assets/custom-icons/trash-2.svg")
+                }
+                "icons/debian-icon.svg" => {
+                    include_bytes!("../../assets/custom-icons/debian-icon.svg")
+                }
+                "icons/ubuntu-icon.svg" => {
+                    include_bytes!("../../assets/custom-icons/ubuntu-icon.svg")
+                }
+                "icons/alpinelinux-icon.svg" => {
+                    include_bytes!("../../assets/custom-icons/alpinelinux-icon.svg")
+                }
+                "icons/android-icon.svg" => {
+                    include_bytes!("../../assets/custom-icons/android-icon.svg")
+                }
+                "icons/archlinux-icon.svg" => {
+                    include_bytes!("../../assets/custom-icons/archlinux-icon.svg")
+                }
+                "icons/postmarketos-icon.svg" => {
+                    include_bytes!("../../assets/custom-icons/postmarketos-icon.svg")
                 }
                 _ => unreachable!(),
             };

@@ -49,6 +49,40 @@ pub(crate) fn init_logging() {
         .with(env_filter)
         .with(file_layer)
         .init();
+
+    // Capture panics and write them into the log so crashes are diagnosable.
+    // We write synchronously (not through the non-blocking buffer) so the
+    // panic reason survives even if the process aborts immediately after.
+    let panic_log_path = log_file.clone();
+    std::panic::set_hook(Box::new(move |info| {
+        let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
+            (*s).to_string()
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "unknown panic payload".to_string()
+        };
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "unknown location".to_string());
+        let line = format!("[panic] {payload}\n    at {location}\n    {info}\n");
+        // Best-effort synchronous append so the panic survives a crash.
+        if let Some(parent) = panic_log_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&panic_log_path)
+        {
+            use std::io::Write;
+            let _ = writeln!(f, "{}", line);
+            let _ = f.flush();
+        }
+        tracing::error!("{}", line.trim_end());
+    }));
+
     tracing::info!("[startup] logging initialized, log file: {}", log_file.display());
 }
 

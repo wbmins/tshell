@@ -60,6 +60,10 @@ pub struct Session {
     pub protocol: String,
     #[serde(default = "default_baud_rate")]
     pub baud_rate: u32,
+    /// Detected OS type (e.g. "debian", "ubuntu", "alpine", "android",
+    /// "arch"). Persisted so the distro icon survives restarts.
+    #[serde(default)]
+    pub os_type: String,
 }
 
 impl Session {
@@ -84,6 +88,7 @@ impl Session {
             proxy_password: String::new(),
             protocol: "ssh".to_string(),
             baud_rate: 115200,
+            os_type: String::new(),
         }
     }
 
@@ -115,6 +120,7 @@ impl Session {
             proxy_password: String::new(),
             protocol: "ssh".to_string(),
             baud_rate: 115200,
+            os_type: String::new(),
         }
     }
 
@@ -139,6 +145,7 @@ impl Session {
             proxy_password: String::new(),
             protocol: "serial".to_string(),
             baud_rate,
+            os_type: String::new(),
         }
     }
 
@@ -164,6 +171,7 @@ impl Session {
             proxy_password: String::new(),
             protocol: "wsl".to_string(),
             baud_rate: 115200,
+            os_type: String::new(),
         }
     }
 }

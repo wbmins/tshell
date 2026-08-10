@@ -30,6 +30,19 @@ use crate::{
     terminal::{self, TabKind},
 };
 
+/// Maps a detected OS identifier to its distro icon.
+fn os_icon_for_os(os: &str) -> Option<AshellIcon> {
+    match os {
+        "debian" => Some(AshellIcon::DebianIcon),
+        "ubuntu" => Some(AshellIcon::UbuntuIcon),
+        "alpine" => Some(AshellIcon::AlpinelinuxIcon),
+        "android" => Some(AshellIcon::AndroidIcon),
+        "arch" => Some(AshellIcon::ArchlinuxIcon),
+        "postmarketos" => Some(AshellIcon::PostmarketosIcon),
+        _ => None,
+    }
+}
+
 impl Ashell {
     fn render_home_page(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let sessions = self.config.sessions().to_vec();
@@ -129,6 +142,18 @@ impl Ashell {
                                                     == Some(session.id.as_str());
                                                 let name = session.name.clone();
                                                 let detail = self.session_detail(&session);
+                                                // Prefer the persisted OS type on the session
+                                                // (survives restarts), falling back to the
+                                                // in-memory runtime cache.
+                                                let os_type = if session.os_type.is_empty() {
+                                                    self.session_os_types
+                                                        .get(&session.id)
+                                                        .cloned()
+                                                        .unwrap_or_default()
+                                                } else {
+                                                    session.os_type.clone()
+                                                };
+                                                let os_icon = os_icon_for_os(&os_type);
                                                 div()
                                                     .id(("home-saved-connect", ix))
                                                     .w_full()
@@ -209,25 +234,48 @@ impl Ashell {
                                                         }
                                                     })
                                                     .child(
-                                                        v_flex()
-                                                            .gap_1()
+                                                        h_flex()
+                                                            .w_full()
+                                                            .items_center()
+                                                            .gap_2()
                                                             .child(
-                                                                div()
-                                                                    .text_size(rems(1.0))
-                                                                    .font_weight(
-                                                                        FontWeight::SEMIBOLD,
+                                                                v_flex()
+                                                                    .flex_1()
+                                                                    .min_w(px(0.))
+                                                                    .gap_1()
+                                                                    .child(
+                                                                        div()
+                                                                            .text_size(
+                                                                                rems(1.0),
+                                                                            )
+                                                                            .font_weight(
+                                                                                FontWeight::SEMIBOLD,
+                                                                            )
+                                                                            .child(name),
                                                                     )
-                                                                    .child(name),
+                                                                    .child(
+                                                                        div()
+                                                                            .text_size(
+                                                                                rems(0.917),
+                                                                            )
+                                                                            .text_color(
+                                                                                cx.theme()
+                                                                                    .muted_foreground,
+                                                                            )
+                                                                            .child(detail),
+                                                                    ),
                                                             )
-                                                            .child(
-                                                                div()
-                                                                    .text_size(rems(0.917))
-                                                                    .text_color(
-                                                                        cx.theme()
-                                                                            .muted_foreground,
-                                                                    )
-                                                                    .child(detail),
-                                                            ),
+                                                            .when_some(os_icon, |el, icon| {
+                                                                el.child(
+                                                                    Icon::new(icon)
+                                                                        .size(rems(2.0))
+                                                                        .mr(px(10.))
+                                                                        .text_color(
+                                                                            cx.theme()
+                                                                                .muted_foreground,
+                                                                        ),
+                                                                )
+                                                            }),
                                                     )
                                             },
                                         )),
