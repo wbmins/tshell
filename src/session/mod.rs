@@ -480,31 +480,65 @@ impl Ashell {
     }
 
     pub(crate) fn set_session_protocol(&mut self, protocol: String, cx: &mut Context<Self>) {
+        let is_wsl = protocol == "wsl";
         self.session_protocol = protocol;
+        // Switching to the WSL tab always fetches the latest installed distros.
+        if is_wsl {
+            self.scan_wsl_distros(cx);
+        }
         cx.notify();
     }
 
-    pub(crate) fn scan_wsl_distros(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn scan_wsl_distros(&mut self, cx: &mut Context<Self>) {
         if self.wsl_scanning {
+            tracing::info!("[wsl] scan_wsl_distros: skip, already scanning");
             return;
         }
+        let t_start = std::time::Instant::now();
         self.wsl_scanning = true;
         cx.notify();
+        tracing::info!("[wsl] scan_wsl_distros: started");
 
-        cx.spawn_in(window, async move |this, mut cx| {
-            let distros = crate::system::wsl::list_wsl_distros();
-            let names: Vec<String> = distros.into_iter().map(|d| d.name).collect();
-            let _ = gpui::AsyncWindowContext::update(&mut cx, |window, cx| {
-                let _ = this.update(cx, |this, cx| {
-                    this.wsl_distros = names;
-                    this.wsl_scanning = false;
-                    if this.wsl_distros.is_empty() {
-                        this.status = t!("wsl_scan_empty").into();
-                    }
-                    let _ = window;
-                    cx.notify();
-                });
+        let weak = cx.weak_entity();
+        cx.spawn(async move |_this, cx| {
+            let t_spawn = std::time::Instant::now();
+            let names = cx
+                .background_executor()
+                .spawn(async move {
+                    let t_exec = std::time::Instant::now();
+                    let names = crate::system::wsl::list_wsl_distros()
+                        .into_iter()
+                        .map(|d| d.name)
+                        .collect::<Vec<String>>();
+                    tracing::info!(
+                        "[wsl] scan_wsl_distros: list_wsl_distros took {:.1}ms",
+                        t_exec.elapsed().as_millis()
+                    );
+                    names
+                })
+                .await;
+            tracing::info!(
+                "[wsl] scan_wsl_distros: cx.spawn->bg_executor dispatch took {:.1}ms (list itself excluded)",
+                t_spawn.elapsed().as_millis()
+            );
+
+            let t_update = std::time::Instant::now();
+            let _ = weak.update(cx, |this, cx| {
+                this.wsl_distros = names;
+                this.wsl_scanning = false;
+                if this.wsl_distros.is_empty() {
+                    this.status = t!("wsl_scan_empty").into();
+                }
+                cx.notify();
             });
+            tracing::info!(
+                "[wsl] scan_wsl_distros: weak.update took {:.1}ms",
+                t_update.elapsed().as_millis()
+            );
+            tracing::info!(
+                "[wsl] scan_wsl_distros: total took {:.1}ms",
+                t_start.elapsed().as_millis()
+            );
             Ok::<(), anyhow::Error>(())
         })
         .detach();

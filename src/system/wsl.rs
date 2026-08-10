@@ -12,29 +12,47 @@ pub struct WslDistro {
 
 /// List all locally installed WSL distributions.
 ///
-/// Runs `wsl.exe -l -q` and parses each non-empty line as a distro name.
+/// Reads the Windows registry (no external `wsl.exe` process, no console
+/// window, no latency). Each installed distro is a subkey of
+/// `HKCU\...\CurrentVersion\Lxss` exposing a `DistributionName` value.
 /// On non-Windows platforms this always returns an empty vec.
 #[cfg(target_os = "windows")]
 pub fn list_wsl_distros() -> Vec<WslDistro> {
-    let output = match std::process::Command::new("wsl.exe")
-        .args(["-l", "-q"])
-        .output()
-    {
-        Ok(o) if o.status.success() => o,
-        _ => return Vec::new(),
-    };
+    let t_start = std::time::Instant::now();
+    let distros = list_wsl_distros_from_registry().unwrap_or_default();
+    tracing::info!(
+        "[wsl] list_wsl_distros: registry took {:.1}ms, found {} distros",
+        t_start.elapsed().as_millis(),
+        distros.len()
+    );
+    distros
+}
 
-    // `wsl.exe -l -q` may output UTF-16LE on some systems; try both encodings.
-    let raw = output.stdout;
-    let text = decode_wsl_output(&raw);
+/// Reads installed WSL distro names from the Windows registry.
+///
+/// Each installed distro is a subkey of `HKCU\...\Lxss` exposing a
+/// `DistributionName` value. This is much faster than launching `wsl.exe` and
+/// never flashes a console window.
+#[cfg(target_os = "windows")]
+fn list_wsl_distros_from_registry() -> Result<Vec<WslDistro>, anyhow::Error> {
+    use winreg::RegKey;
+    use winreg::enums::HKEY_CURRENT_USER;
 
-    text.lines()
-        .map(|line| line.trim().trim_matches('\u{0}').trim())
-        .filter(|line| !line.is_empty() && !line.eq_ignore_ascii_case("NAME"))
-        .map(|name| WslDistro {
-            name: name.to_string(),
-        })
-        .collect()
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let lxss = hkcu
+        .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Lxss")?;
+
+    let mut distros = Vec::new();
+    for sub in lxss.enum_keys().flatten() {
+        let key = lxss.open_subkey(&sub)?;
+        let name: Option<String> = key.get_value("DistributionName").ok();
+        if let Some(name) = name {
+            if !name.trim().is_empty() {
+                distros.push(WslDistro { name });
+            }
+        }
+    }
+    Ok(distros)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -42,24 +60,3 @@ pub fn list_wsl_distros() -> Vec<WslDistro> {
     Vec::new()
 }
 
-#[cfg(target_os = "windows")]
-fn decode_wsl_output(bytes: &[u8]) -> String {
-    // WSL commonly emits UTF-16LE. Detect BOM or NUL-bytes and decode accordingly.
-    if bytes.starts_with(&[0xff, 0xfe]) || bytes.starts_with(&[0xfe, 0xff]) {
-        return String::from_utf16_lossy(
-            &bytes[2..]
-                .chunks_exact(2)
-                .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                .collect::<Vec<u16>>(),
-        );
-    }
-    // Heuristic: presence of NUL bytes suggests UTF-16.
-    if bytes.windows(2).any(|w| w[0] == 0 || w[1] == 0) {
-        let units: Vec<u16> = bytes
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
-            .collect();
-        return String::from_utf16_lossy(&units);
-    }
-    String::from_utf8_lossy(bytes).to_string()
-}

@@ -175,33 +175,15 @@ impl Ashell {
                                             .child(div().text_sm().text_color(cx.theme().muted_foreground).child(t!("wsl_distro").to_string()))
                                             .child(Input::new(&host_input).tab_index(1))
                                     )
-                                    .child(
-                                        h_flex()
-                                            .items_center()
-                                            .gap_2()
-                                            .child(div().flex_1())
-                                            .when(wsl_scanning, |el| {
-                                                el.child(
-                                                    div()
-                                                        .text_sm()
-                                                        .text_color(cx.theme().muted_foreground)
-                                                        .child(t!("scanning_wsl").to_string()),
-                                                )
-                                            })
-                                            .child(
-                                                Button::new("wsl-scan")
-                                                    .ghost()
-                                                    .label(t!("scan_wsl").to_string())
-                                                    .disabled(wsl_scanning)
-                                                    .on_click(window.listener_for(
-                                                        &view,
-                                                        |this, _, window, cx| {
-                                                            this.scan_wsl_distros(window, cx);
-                                                        },
-                                                    )),
-                                            ),
-                                    )
-                                    .when(!wsl_distros.is_empty(), |el| {
+                                    .when(wsl_scanning, |el| {
+                                        el.child(
+                                            div()
+                                                .text_sm()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(t!("scanning_wsl").to_string()),
+                                        )
+                                    })
+                                    .when(!wsl_scanning && !wsl_distros.is_empty(), |el| {
                                         let theme = cx.theme();
                                         el.child(
                                             div()
