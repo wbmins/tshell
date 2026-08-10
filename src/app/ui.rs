@@ -1840,6 +1840,24 @@ impl Ashell {
                             })),
                     ),
             )
+            // Settings button, below expand and above saved sessions
+            .child(
+                div()
+                    .w_full()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .pb_2()
+                    .child(
+                        Button::new("sidebar-settings-collapsed")
+                            .ghost()
+                            .icon(IconName::Settings)
+                            .tooltip(t!("settings_open_settings").to_string())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.show_settings_dialog(window, cx)
+                            })),
+                    ),
+            )
             // Saved sessions as compact cards
             .child(
                 div()
