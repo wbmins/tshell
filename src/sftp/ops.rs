@@ -208,72 +208,41 @@ impl Ashell {
             .active_sftp()
             .map(|sftp| sftp.current_path.clone())
             .unwrap_or_else(|| "/".into());
+        // Some platforms (macOS, Linux) can select files and folders together.
+        // Windows can only pick files or folders in one dialog, so it falls back
+        // to multi-file selection there.
+        let supports_mixed = cx.can_select_mixed_files_and_dirs();
         let path_prompt = cx.prompt_for_paths(PathPromptOptions {
             files: true,
-            directories: false,
-            multiple: false,
-            prompt: Some("Select File to Upload".into()),
+            directories: supports_mixed,
+            multiple: true,
+            prompt: Some(
+                (if supports_mixed {
+                    "Select Files/Folders to Upload"
+                } else {
+                    "Select Files to Upload"
+                })
+                .into(),
+            ),
         });
         cx.spawn_in(window, async move |this, cx| {
             match path_prompt.await {
-                Ok(Ok(Some(mut paths))) => {
-                    if let Some(file) = paths.pop() {
-                        let local_path = file.to_string_lossy().to_string();
-                        tracing::info!(
-                            "[sftp] initiating upload of file '{}' to '{}'",
-                            local_path,
-                            remote_dir
-                        );
-                        handle.upload_paths(vec![local_path], remote_dir);
-                        this.update(cx, |this, cx| {
-                            this.show_transfers_dialog = true;
-                            cx.notify();
-                        })?;
-                    }
-                }
-                Ok(Err(err)) => {
+                Ok(Ok(Some(paths))) if !paths.is_empty() => {
+                    let local_paths: Vec<String> = paths
+                        .into_iter()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .collect();
+                    tracing::info!(
+                        "[sftp] initiating upload of {} path(s) to '{}': {:?}",
+                        local_paths.len(),
+                        remote_dir,
+                        local_paths
+                    );
+                    handle.upload_paths(local_paths, remote_dir);
                     this.update(cx, |this, cx| {
-                        this.status = format!("upload picker failed: {err}").into();
+                        this.show_transfers_dialog = true;
                         cx.notify();
                     })?;
-                }
-                _ => {}
-            }
-            Ok::<(), anyhow::Error>(())
-        })
-        .detach();
-    }
-
-    pub(crate) fn upload_sftp_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(handle) = self.active_sftp_handle().cloned() else {
-            return;
-        };
-        let remote_dir = self
-            .active_sftp()
-            .map(|sftp| sftp.current_path.clone())
-            .unwrap_or_else(|| "/".into());
-        let path_prompt = cx.prompt_for_paths(PathPromptOptions {
-            files: false,
-            directories: true,
-            multiple: false,
-            prompt: Some("Select Folder to Upload".into()),
-        });
-        cx.spawn_in(window, async move |this, cx| {
-            match path_prompt.await {
-                Ok(Ok(Some(mut paths))) => {
-                    if let Some(folder) = paths.pop() {
-                        let local_path = folder.to_string_lossy().to_string();
-                        tracing::info!(
-                            "[sftp] initiating upload of folder '{}' to '{}'",
-                            local_path,
-                            remote_dir
-                        );
-                        handle.upload_paths(vec![local_path], remote_dir);
-                        this.update(cx, |this, cx| {
-                            this.show_transfers_dialog = true;
-                            cx.notify();
-                        })?;
-                    }
                 }
                 Ok(Err(err)) => {
                     this.update(cx, |this, cx| {

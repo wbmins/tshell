@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use gpui::{AssetSource, IntoElement, Result, SharedString};
+use gpui::{App, AssetSource, IntoElement, RenderOnce, Result, SharedString, Window};
 use gpui_component::IconNamed;
 
 // Custom icons embedded with the app, in addition to gpui-component's built-ins.
@@ -8,7 +8,14 @@ use gpui_component::IconNamed;
 // `AshellIcon` and is served at the `icons/<name>.svg` asset path.
 gpui_component::icon_named!(AshellIcon, "assets/custom-icons");
 
-const CUSTOM_ICON_PATHS: &[&str] = &["icons/file-down.svg"];
+impl RenderOnce for AshellIcon {
+    fn render(self, _: &mut Window, _cx: &mut App) -> impl IntoElement {
+        let icon: gpui_component::Icon = self.into();
+        icon
+    }
+}
+
+const CUSTOM_ICON_PATHS: &[&str] = &["icons/file-down.svg", "icons/file-up.svg"];
 
 /// Asset source serving the app's custom icons, falling back to
 /// gpui-component's default icon assets.
@@ -21,6 +28,7 @@ impl AssetSource for Assets {
                 "icons/file-down.svg" => {
                     include_bytes!("../../assets/custom-icons/file-down.svg")
                 }
+                "icons/file-up.svg" => include_bytes!("../../assets/custom-icons/file-up.svg"),
                 _ => unreachable!(),
             };
             return Ok(Some(Cow::Borrowed(bytes)));

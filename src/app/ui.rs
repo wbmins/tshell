@@ -254,20 +254,10 @@ impl Ashell {
                     Button::new("sftp-upload-file")
                         .ghost()
                         .small()
-                        .icon(IconName::Plus)
+                        .icon(AshellIcon::FileUp)
                         .label(t!("upload_file").to_string())
                         .on_click(
                             cx.listener(|this, _, window, cx| this.upload_sftp_files(window, cx)),
-                        ),
-                )
-                .child(
-                    Button::new("sftp-upload-folder")
-                        .ghost()
-                        .small()
-                        .icon(IconName::Folder)
-                        .label(t!("upload_folder").to_string())
-                        .on_click(
-                            cx.listener(|this, _, window, cx| this.upload_sftp_folder(window, cx)),
                         ),
                 )
                 .child(
