@@ -24,6 +24,7 @@ pub enum TabKind {
     Local,
     Ssh,
     Serial,
+    Wsl,
 }
 
 #[derive(Debug)]
@@ -211,6 +212,24 @@ impl TerminalTab {
         )
     }
 
+    pub fn new_wsl(
+        id: String,
+        session: &Session,
+        backend: BackendTx,
+        events: std::sync::mpsc::Sender<BackendEvent>,
+    ) -> Self {
+        let mut tab = Self::new(
+            id,
+            session.name.clone(),
+            TabKind::Wsl,
+            format!("connecting WSL / {}", session.host),
+            backend,
+            events,
+        );
+        tab.session = Some(session.clone());
+        tab
+    }
+
     pub fn new_ssh(
         id: String,
         session: &Session,
@@ -267,7 +286,7 @@ impl TerminalTab {
             dynamic_title: title,
             kind,
             status,
-            connected: matches!(kind, TabKind::Local),
+            connected: matches!(kind, TabKind::Local | TabKind::Wsl),
             disconnected_reason: None,
             backend_generation: 0,
             backend_initialized: true,

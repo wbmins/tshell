@@ -35,6 +35,7 @@ impl Ashell {
         }
 
         let initial_is_serial = self.session_protocol == "serial";
+        let initial_protocol = self.session_protocol.clone();
         let view = cx.entity();
         let session_name_input = self.session_name_input.clone();
         let host_input = self.host_input.clone();
@@ -53,7 +54,13 @@ impl Ashell {
 
         window.open_dialog(cx, move |dialog: Dialog, _window, _cx| {
             dialog
-                .title(if initial_is_serial { t!("new_serial_connection") } else { t!("new_ssh_connection") })
+                .title(if initial_is_serial {
+                    t!("new_serial_connection")
+                } else if initial_protocol == "wsl" {
+                    t!("new_wsl_connection")
+                } else {
+                    t!("new_ssh_connection")
+                })
                 .w(px(520.))
                 .overlay_closable(true)
                 .on_close({
@@ -91,6 +98,7 @@ impl Ashell {
                         let protocol = view.read(cx).session_protocol.clone();
                         let is_ssh = protocol == "ssh";
                         let is_serial = protocol == "serial";
+                        let is_wsl = protocol == "wsl";
                         content.child(
                             v_flex()
                                 .gap_3()
@@ -119,6 +127,17 @@ impl Ashell {
                                                         this.set_session_protocol("serial".to_string(), cx);
                                                     },
                                                 )),
+                                        )
+                                        .child(
+                                            Button::new("proto-wsl")
+                                                .label("WSL")
+                                                .when(is_wsl, |button| button.primary())
+                                                .on_click(window.listener_for(
+                                                    &view,
+                                                    |this, _, _window, cx| {
+                                                        this.set_session_protocol("wsl".to_string(), cx);
+                                                    },
+                                                )),
                                         ),
                                 )
                                 .when(is_serial, |this| {
@@ -140,6 +159,92 @@ impl Ashell {
                                             .child(div().text_sm().text_color(cx.theme().muted_foreground).child(t!("baud_rate").to_string()))
                                             .child(Input::new(&baud_rate_input).tab_index(2))
                                     )
+                                })
+                                .when(is_wsl, |this| {
+                                    let wsl_distros = view.read(cx).wsl_distros.clone();
+                                    let wsl_scanning = view.read(cx).wsl_scanning;
+                                    this.child(
+                                        v_flex()
+                                            .gap_1()
+                                            .child(div().text_sm().text_color(cx.theme().muted_foreground).child(t!("session_name").to_string()))
+                                            .child(Input::new(&session_name_input).tab_index(0))
+                                    )
+                                    .child(
+                                        v_flex()
+                                            .gap_1()
+                                            .child(div().text_sm().text_color(cx.theme().muted_foreground).child(t!("wsl_distro").to_string()))
+                                            .child(Input::new(&host_input).tab_index(1))
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .items_center()
+                                            .gap_2()
+                                            .child(div().flex_1())
+                                            .when(wsl_scanning, |el| {
+                                                el.child(
+                                                    div()
+                                                        .text_sm()
+                                                        .text_color(cx.theme().muted_foreground)
+                                                        .child(t!("scanning_wsl").to_string()),
+                                                )
+                                            })
+                                            .child(
+                                                Button::new("wsl-scan")
+                                                    .ghost()
+                                                    .label(t!("scan_wsl").to_string())
+                                                    .disabled(wsl_scanning)
+                                                    .on_click(window.listener_for(
+                                                        &view,
+                                                        |this, _, window, cx| {
+                                                            this.scan_wsl_distros(window, cx);
+                                                        },
+                                                    )),
+                                            ),
+                                    )
+                                    .when(!wsl_distros.is_empty(), |el| {
+                                        let theme = cx.theme();
+                                        el.child(
+                                            div()
+                                                .h(px(160.))
+                                                .id("wsl-distro-list")
+                                                .overflow_y_scroll()
+                                                .border_1()
+                                                .border_color(theme.border)
+                                                .rounded_md()
+                                                .children(wsl_distros.iter().enumerate().map(
+                                                    |(i, distro)| {
+                                                        let distro = distro.clone();
+                                                        let click_distro = distro.clone();
+                                                        div()
+                                                            .id(("wsl-distro-entry", i))
+                                                            .px_2()
+                                                            .py_1()
+                                                            .cursor_pointer()
+                                                            .hover(|el| el.bg(theme.selection))
+                                                            .text_sm()
+                                                            .on_click(window.listener_for(
+                                                                &view,
+                                                                move |this, _, window, cx| {
+                                                                    this.select_wsl_distro(
+                                                                        click_distro.clone(),
+                                                                        window,
+                                                                        cx,
+                                                                    );
+                                                                },
+                                                            ))
+                                                            .child(distro)
+                                                    },
+                                                )),
+                                        )
+                                    })
+                                    .when(!wsl_scanning && wsl_distros.is_empty(), |el| {
+                                        el.child(
+                                            div()
+                                                .text_sm()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(t!("wsl_scan_hint").to_string()),
+                                        )
+                                    })
                                 })
                                 .when(is_ssh, |this| {
                                     this.child(

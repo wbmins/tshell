@@ -105,6 +105,48 @@ impl Ashell {
             return;
         }
 
+        if self.session_protocol == "wsl" {
+            let session_name = self.session_name_input.read(cx).value().trim().to_string();
+            let distro = self.host_input.read(cx).value().trim().to_string();
+
+            if distro.is_empty() {
+                self.status = t!("wsl_distro_required").into();
+                cx.notify();
+                return;
+            }
+
+            let name = if session_name.is_empty() {
+                format!("WSL / {distro}")
+            } else {
+                session_name
+            };
+
+            let existing_id = self.editing_session_id.clone();
+            let existing_last_used = existing_id
+                .as_deref()
+                .and_then(|id| self.config.get(id))
+                .and_then(|session| session.last_used.clone());
+
+            let mut session = Session::wsl(distro);
+            session.name = name;
+            if let Some(id) = existing_id {
+                session.id = id;
+            }
+            session.last_used = existing_last_used;
+
+            self.config.upsert(session.clone());
+            if let Err(err) = self.config.save() {
+                tracing::warn!("failed to save config: {err:#}");
+            }
+
+            self.open_wsl_session(session, cx);
+            self.editing_session_id = None;
+            self.active_dialog = None;
+            window.close_dialog(cx);
+            cx.notify();
+            return;
+        }
+
         tracing::info!("[ui] user initiating new ssh connection from form");
         let session_name = self.session_name_input.read(cx).value().trim().to_string();
         let host = self.host_input.read(cx).value().trim().to_string();
@@ -442,6 +484,50 @@ impl Ashell {
         cx.notify();
     }
 
+    pub(crate) fn scan_wsl_distros(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.wsl_scanning {
+            return;
+        }
+        self.wsl_scanning = true;
+        cx.notify();
+
+        cx.spawn_in(window, async move |this, mut cx| {
+            let distros = crate::system::wsl::list_wsl_distros();
+            let names: Vec<String> = distros.into_iter().map(|d| d.name).collect();
+            let _ = gpui::AsyncWindowContext::update(&mut cx, |window, cx| {
+                let _ = this.update(cx, |this, cx| {
+                    this.wsl_distros = names;
+                    this.wsl_scanning = false;
+                    if this.wsl_distros.is_empty() {
+                        this.status = t!("wsl_scan_empty").into();
+                    }
+                    let _ = window;
+                    cx.notify();
+                });
+            });
+            Ok::<(), anyhow::Error>(())
+        })
+        .detach();
+    }
+
+    pub(crate) fn select_wsl_distro(
+        &mut self,
+        distro: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        Self::set_input_value(&self.host_input, distro.clone(), window, cx);
+        if self.session_name_input.read(cx).value().trim().is_empty() {
+            Self::set_input_value(
+                &self.session_name_input,
+                format!("WSL / {distro}"),
+                window,
+                cx,
+            );
+        }
+        cx.notify();
+    }
+
     pub(crate) fn refresh_ssh_config(&mut self) {
         self.ssh_config_entries =
             crate::session::ssh_config::parse_ssh_config().unwrap_or_default();
@@ -503,6 +589,8 @@ impl Ashell {
         };
         if session.protocol == "serial" {
             self.open_serial_session(session, cx);
+        } else if session.protocol == "wsl" {
+            self.open_wsl_session(session, cx);
         } else {
             self.open_ssh_session(session, cx);
         }
@@ -718,6 +806,65 @@ impl Ashell {
             }
         }
         self.status = "serial tab opened".into();
+        cx.notify();
+    }
+
+    pub(crate) fn open_wsl_session(&mut self, session: Session, cx: &mut Context<Self>) {
+        tracing::info!(
+            "[session] opening WSL tab for session '{}' (distro={})",
+            session.name,
+            session.host
+        );
+        let id = Uuid::new_v4().to_string();
+        let backend = match crate::backend::local::spawn_wsl_terminal(
+            id.clone(),
+            DEFAULT_COLS,
+            DEFAULT_ROWS,
+            self.events_tx.clone(),
+            session.host.clone(),
+        ) {
+            Ok(backend) => backend,
+            Err(err) => {
+                self.status = format!("failed to open WSL: {err:#}").into();
+                cx.notify();
+                return;
+            }
+        };
+        self.tabs.push(TerminalTab::new_wsl(
+            id.clone(),
+            &session,
+            backend,
+            self.events_tx.clone(),
+        ));
+        self.active_tab = Some(id.clone());
+        self.connection_progress = Some(crate::app::ConnectionProgress {
+            tab_id: id.clone(),
+            title: rust_i18n::t!("connecting").into(),
+            lines: vec![rust_i18n::t!("starting_connection").into()],
+            failed: false,
+        });
+        self.pane_root = PaneLayout::Single(id.clone());
+        self.focused_pane_path = vec![];
+        let group_id = Uuid::new_v4().to_string();
+        self.tab_groups.push(TabGroup {
+            id: group_id.clone(),
+            title: session.name.clone(),
+            pane_root: PaneLayout::Single(id.clone()),
+            sftp: None,
+        });
+        self.active_group = Some(group_id.clone());
+        self.tabs_scroll_handle.scroll_to_item(self.tabs.len() - 1);
+        if let Some(session_id) = self.active_session_id() {
+            if let Some(index) = self
+                .config
+                .sessions()
+                .iter()
+                .position(|s| s.id == session_id)
+            {
+                self.saved_scroll_handle.scroll_to_item(index);
+            }
+        }
+        self.status = "wsl tab opened".into();
         cx.notify();
     }
 
@@ -1168,6 +1315,8 @@ impl Ashell {
     pub(crate) fn session_detail(&self, session: &Session) -> String {
         if session.protocol == "serial" {
             format!("Serial: {}@{}", session.host, session.baud_rate)
+        } else if session.protocol == "wsl" {
+            format!("WSL / {}", session.host)
         } else {
             format!("{}@{}:{}", session.user, session.host, session.port)
         }
@@ -1254,6 +1403,32 @@ impl Ashell {
                     crate::terminal::BackendTx::Serial(backend),
                     self.events_tx.clone(),
                 )
+            }
+            TabKind::Wsl => {
+                let Some(session) = current_tab.session.clone() else {
+                    self.status = "cannot split: no session info".into();
+                    cx.notify();
+                    return;
+                };
+                match crate::backend::local::spawn_wsl_terminal(
+                    new_id.clone(),
+                    DEFAULT_COLS,
+                    DEFAULT_ROWS,
+                    self.events_tx.clone(),
+                    session.host.clone(),
+                ) {
+                    Ok(backend) => TerminalTab::new_wsl(
+                        new_id.clone(),
+                        &session,
+                        backend,
+                        self.events_tx.clone(),
+                    ),
+                    Err(err) => {
+                        self.status = format!("failed to split: {err:#}").into();
+                        cx.notify();
+                        return;
+                    }
+                }
             }
         };
         tab.resize(DEFAULT_COLS, DEFAULT_ROWS);

@@ -15,6 +15,44 @@ pub fn spawn_local_terminal(
     rows: u16,
     events: Sender<BackendEvent>,
 ) -> Result<BackendTx> {
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| {
+        if cfg!(windows) {
+            "powershell.exe".into()
+        } else {
+            "/bin/zsh".into()
+        }
+    });
+    let mut cmd = CommandBuilder::new(&shell);
+    cmd.env("SHELL", shell.clone());
+    spawn_pty_command(tab_id, cols, rows, events, cmd, "local shell")
+}
+
+/// Spawn a WSL terminal that drops directly into a specific installed distro.
+pub fn spawn_wsl_terminal(
+    tab_id: String,
+    cols: u16,
+    rows: u16,
+    events: Sender<BackendEvent>,
+    distro: String,
+) -> Result<BackendTx> {
+    // `wsl.exe -d <distro>` starts an interactive shell inside that distro.
+    // `--cd ~` ensures we land in the user's home directory.
+    let mut cmd = CommandBuilder::new("wsl.exe");
+    cmd.arg("-d");
+    cmd.arg(distro);
+    cmd.arg("--cd");
+    cmd.arg("~");
+    spawn_pty_command(tab_id, cols, rows, events, cmd, "wsl shell")
+}
+
+fn spawn_pty_command(
+    tab_id: String,
+    cols: u16,
+    rows: u16,
+    events: Sender<BackendEvent>,
+    mut cmd: CommandBuilder,
+    status_text: &'static str,
+) -> Result<BackendTx> {
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
@@ -25,15 +63,6 @@ pub fn spawn_local_terminal(
         })
         .context("open local PTY")?;
 
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| {
-        if cfg!(windows) {
-            "powershell.exe".into()
-        } else {
-            "/bin/zsh".into()
-        }
-    });
-
-    let mut cmd = CommandBuilder::new(&shell);
     cmd.env(
         "TERM",
         std::env::var("TERM").unwrap_or_else(|_| "xterm-256color".into()),
@@ -54,8 +83,10 @@ pub fn spawn_local_terminal(
     if let Ok(home) = std::env::var("HOME") {
         cmd.env("HOME", home);
     }
-    cmd.env("SHELL", shell);
-    let mut child = pair.slave.spawn_command(cmd).context("spawn local shell")?;
+    let mut child = pair
+        .slave
+        .spawn_command(cmd)
+        .context("spawn local shell")?;
     drop(pair.slave);
 
     let master = pair.master;
@@ -134,9 +165,14 @@ pub fn spawn_local_terminal(
     });
 
     let _ = events.send(BackendEvent::Status {
-        tab_id,
-        text: "local shell ready".into(),
+        tab_id: tab_id.clone(),
+        text: format!("{status_text} ready"),
     });
+
+    // The PTY is already up once the child process spawned, so report
+    // "connected" immediately. This clears any pending connection-progress
+    // overlay that the UI shows for WSL / local sessions.
+    let _ = events.send(BackendEvent::Connected { tab_id });
 
     Ok(BackendTx::Local(cmd_tx))
 }

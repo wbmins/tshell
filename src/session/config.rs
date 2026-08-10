@@ -141,6 +141,31 @@ impl Session {
             baud_rate,
         }
     }
+
+    pub fn wsl(distro: String) -> Self {
+        let name = format!("WSL / {distro}");
+        Self {
+            id: Uuid::new_v4().to_string(),
+            name,
+            // 复用 host 字段存储 WSL 发行版名称
+            host: distro,
+            port: 0,
+            user: String::new(),
+            auth: AuthMethod::Password,
+            password: String::new(),
+            private_key_path: String::new(),
+            private_key_inline: String::new(),
+            passphrase: String::new(),
+            last_used: None,
+            proxy_type: "none".to_string(),
+            proxy_host: String::new(),
+            proxy_port: None,
+            proxy_user: String::new(),
+            proxy_password: String::new(),
+            protocol: "wsl".to_string(),
+            baud_rate: 115200,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
