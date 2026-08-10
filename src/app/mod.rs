@@ -1,6 +1,7 @@
 pub mod config_sync;
 pub mod constants;
 pub mod dialogs;
+pub mod icons;
 pub mod keybinding_recorder;
 pub mod resizable;
 pub mod search;

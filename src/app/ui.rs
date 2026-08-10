@@ -20,6 +20,7 @@ use gpui_component::{
 };
 use rust_i18n::t;
 
+use crate::app::icons::AshellIcon;
 use crate::{
     Ashell, PaneLayout,
     app::constants::{COLLAPSED_SIDEBAR_WIDTH, SIDEBAR_WIDTH, TERMINAL_KEY_CONTEXT},
@@ -273,7 +274,7 @@ impl Ashell {
                     Button::new("sftp-download-selected")
                         .ghost()
                         .small()
-                        .icon(IconName::ArrowDown)
+                        .icon(AshellIcon::FileDown)
                         .label(if selected_entries.is_empty() {
                             t!("download").to_string()
                         } else {
@@ -292,11 +293,6 @@ impl Ashell {
                             IconName::Eye
                         } else {
                             IconName::EyeOff
-                        })
-                        .tooltip(if self.show_hidden_files {
-                            t!("hidden_files_visible").to_string()
-                        } else {
-                            t!("hidden_files_hidden").to_string()
                         })
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.show_hidden_files = !this.show_hidden_files;

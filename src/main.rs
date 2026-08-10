@@ -1,7 +1,6 @@
 #![windows_subsystem = "windows"]
 
 use gpui::KeyBinding;
-use gpui_component_assets::Assets;
 
 mod app;
 mod backend;
@@ -32,11 +31,11 @@ fn main() {
 
     #[cfg(target_os = "macos")]
     let app = gpui_platform::application()
-        .with_assets(Assets)
+        .with_assets(app::icons::Assets)
         .with_quit_mode(gpui::QuitMode::LastWindowClosed);
 
     #[cfg(not(target_os = "macos"))]
-    let app = gpui_platform::application().with_assets(Assets);
+    let app = gpui_platform::application().with_assets(app::icons::Assets);
     app::startup::startup_mark("create application", t1, std::time::Instant::now());
 
     app.on_reopen(|cx| {
