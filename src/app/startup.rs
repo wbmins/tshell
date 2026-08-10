@@ -4,110 +4,40 @@ use gpui_component::Root;
 use crate::Ashell;
 use crate::session::config::ConfigStore;
 
+pub(crate) fn startup_mark(label: &str, start: std::time::Instant, end: std::time::Instant) {
+    tracing::info!(
+        "[startup] {label}: {:.1} ms",
+        end.duration_since(start).as_secs_f64() * 1000.0
+    );
+}
+
 pub(crate) fn bind_workspace_keys(cx: &mut gpui::App) {
     let config = ConfigStore::load().unwrap_or_else(|_| ConfigStore::in_memory());
     crate::app::keybinding_recorder::bind_workspace_keys_from_config(cx, &config);
 }
 
-struct LocalMinutelyRoller {
-    dir: std::path::PathBuf,
-    prefix: String,
-    current_minute: u32,
-    file: Option<std::fs::File>,
-}
-
-impl LocalMinutelyRoller {
-    fn new(dir: std::path::PathBuf, prefix: String) -> Self {
-        Self {
-            dir,
-            prefix,
-            current_minute: 60,
-            file: None,
-        }
-    }
-
-    fn rollover(&mut self, now: chrono::DateTime<chrono::Local>) -> std::io::Result<()> {
-        use chrono::Timelike;
-        let minute = now.minute();
-        if self.current_minute != minute || self.file.is_none() {
-            let filename = format!("{}-{}.log", self.prefix, now.format("%Y-%m-%d-%H-%M"));
-            let path = self.dir.join(filename);
-            let file = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)?;
-            self.file = Some(file);
-            self.current_minute = minute;
-
-            // Cleanup old files keeping last 6
-            if let Ok(entries) = std::fs::read_dir(&self.dir) {
-                let mut files: Vec<_> = entries
-                    .filter_map(|e| e.ok())
-                    .filter(|e| e.file_name().to_string_lossy().starts_with(&self.prefix))
-                    .collect();
-                files.sort_by_key(|e| {
-                    e.metadata()
-                        .and_then(|m| m.modified())
-                        .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
-                });
-                if files.len() > 6 {
-                    for file in files.iter().take(files.len() - 6) {
-                        let _ = std::fs::remove_file(file.path());
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-impl std::io::Write for LocalMinutelyRoller {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let now = chrono::Local::now();
-        let _ = self.rollover(now);
-        if let Some(f) = &mut self.file {
-            f.write(buf)
-        } else {
-            Ok(buf.len())
-        }
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        if let Some(f) = &mut self.file {
-            f.flush()
-        } else {
-            Ok(())
-        }
-    }
-}
-
 pub(crate) fn init_logging() {
     use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-    let log_dir = directories::BaseDirs::new()
+    let log_file = directories::BaseDirs::new()
         .map(|dirs| dirs.home_dir().join(".config").join("ashell").join("log"))
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("ashell.log");
 
-    std::fs::create_dir_all(&log_dir).ok();
+    if let Some(parent) = log_file.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
 
-    let roller = LocalMinutelyRoller::new(log_dir.clone(), "ashell".to_string());
-
-    let (non_blocking, _guard) = tracing_appender::non_blocking(roller);
+    let file_appender = tracing_appender::rolling::never(
+        log_file.parent().unwrap_or(std::path::Path::new(".")),
+        "ashell.log",
+    );
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
     // Leak the guard so it lives for the entire duration of the app since GPUI's run might not return
     std::mem::forget(_guard);
 
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
-
-    let stdout_layer = if cfg!(debug_assertions) {
-        Some(
-            tracing_subscriber::fmt::layer()
-                .with_timer(tracing_subscriber::fmt::time::LocalTime::rfc_3339())
-                .with_target(true),
-        )
-    } else {
-        None
-    };
 
     let file_layer = tracing_subscriber::fmt::layer()
         .with_timer(tracing_subscriber::fmt::time::LocalTime::rfc_3339())
@@ -117,9 +47,9 @@ pub(crate) fn init_logging() {
 
     tracing_subscriber::registry()
         .with(env_filter)
-        .with(stdout_layer)
         .with(file_layer)
         .init();
+    tracing::info!("[startup] logging initialized, log file: {}", log_file.display());
 }
 
 #[cfg(target_os = "macos")]
@@ -214,7 +144,10 @@ fn read_proxy_from_env() -> Option<(String, String, Option<u16>, String, String)
 pub(crate) fn sync_macos_launch_environment() {}
 
 pub(crate) fn open_main_window(cx: &mut App) {
+    let t0 = std::time::Instant::now();
     let config = ConfigStore::load().unwrap_or_else(|_| ConfigStore::in_memory());
+    let t1 = std::time::Instant::now();
+    startup_mark("open_main_window: load config", t0, t1);
 
     let _ = crate::session::config::ENV_PROXY.get_or_init(|| {
         read_proxy_from_env().map(|(proxy_type, host, port, user, password)| {
@@ -234,6 +167,8 @@ pub(crate) fn open_main_window(cx: &mut App) {
             }
         })
     });
+    let t2 = std::time::Instant::now();
+    startup_mark("open_main_window: proxy env", t1, t2);
 
     let mut window_options = WindowOptions::default();
 
@@ -297,12 +232,17 @@ pub(crate) fn open_main_window(cx: &mut App) {
             size(width, height),
         )));
     }
+    let t3 = std::time::Instant::now();
+    startup_mark("open_main_window: window options", t2, t3);
 
     cx.open_window(window_options, |window, cx| {
+        let win_t0 = std::time::Instant::now();
         window.activate_window();
         window.set_window_title("ashell");
         gpui_component::Theme::sync_system_appearance(Some(window), cx);
         let view = cx.new(|cx| Ashell::new(window, cx));
+        let win_t1 = std::time::Instant::now();
+        startup_mark("open_window: Ashell::new", win_t0, win_t1);
 
         tracing::info!("[ui] main application window opened");
         let focus_handle = view.read(cx).focus_handle.clone();
@@ -321,7 +261,15 @@ pub(crate) fn open_main_window(cx: &mut App) {
             true
         });
 
-        cx.new(|cx| Root::new(view, window, cx))
+        let root = cx.new(|cx| Root::new(view, window, cx));
+        startup_mark("open_window: Root::new", win_t1, std::time::Instant::now());
+        startup_mark("open_window: callback total", win_t0, std::time::Instant::now());
+        root
     })
     .expect("failed to open window");
+    startup_mark(
+        "open_main_window: open_window (total)",
+        t3,
+        std::time::Instant::now(),
+    );
 }

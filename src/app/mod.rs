@@ -382,6 +382,7 @@ impl Ashell {
     }
 
     pub(crate) fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let t0 = Instant::now();
         let host_input = cx.new(|cx| InputState::new(window, cx).placeholder(t!("host")));
         let session_name_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("name (optional)"));
@@ -422,10 +423,14 @@ impl Ashell {
             cx.new(|cx| InputState::new(window, cx).placeholder(t!("new_folder").to_string()));
         let search_input =
             cx.new(|cx| InputState::new(window, cx).placeholder(t!("search").to_string()));
+        let t1 = Instant::now();
+        startup::startup_mark("Ashell::new: basic input states", t0, t1);
         let config = ConfigStore::load().unwrap_or_else(|err| {
             tracing::warn!("failed to load config: {err:#}");
             ConfigStore::in_memory()
         });
+        let t2 = Instant::now();
+        startup::startup_mark("Ashell::new: load config", t1, t2);
         let global_proxy_host_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder(t!("proxy_host").to_string())
@@ -505,6 +510,8 @@ impl Ashell {
                 .placeholder(t!("sync_encryption_password").to_string())
                 .masked(true)
         });
+        let t3 = Instant::now();
+        startup::startup_mark("Ashell::new: proxy/sync input states", t2, t3);
 
         let _subscriptions = vec![
             cx.subscribe_in(&host_input, window, Self::on_input_event),
@@ -539,12 +546,16 @@ impl Ashell {
                 Self::on_input_event,
             ),
         ];
+        let t4 = Instant::now();
+        startup::startup_mark("Ashell::new: input subscriptions", t3, t4);
 
         let (events_tx, events_rx) = mpsc::channel();
         let workspace_panels = cx.new(|_| ResizableState::default());
         let body_panels = cx.new(|_| ResizableState::default());
         let mut system_sampler = SystemSampler::new();
         let system = system_sampler.sample();
+        let t5 = Instant::now();
+        startup::startup_mark("Ashell::new: panels + system sampler", t4, t5);
         let default_light_theme_name = ThemeRegistry::global(cx).default_light_theme().name.clone();
         let default_dark_theme_name = ThemeRegistry::global(cx).default_dark_theme().name.clone();
         let follow_system_theme = config.follow_system_theme();
@@ -577,12 +588,20 @@ impl Ashell {
         }
         rust_i18n::set_locale(&active_locale);
         gpui_component::set_locale(&active_locale);
+        let t6 = Instant::now();
+        startup::startup_mark("Ashell::new: theme + locale", t5, t6);
         let ui_font_family: SharedString = config.ui_font_family().into();
         let terminal_font_family: SharedString = config.terminal_font_family().into();
         let last_sidebar_width = Some(px(config
             .workspace_panels()
             .and_then(|s| s.first().copied())
             .unwrap_or(constants::SIDEBAR_WIDTH)));
+        let ssh_config_entries = crate::session::ssh_config::parse_ssh_config().unwrap_or_default();
+        let t7 = Instant::now();
+        startup::startup_mark("Ashell::new: parse ssh config", t6, t7);
+        let runtime = Runtime::new().expect("create tokio runtime");
+        let t8 = Instant::now();
+        startup::startup_mark("Ashell::new: create tokio runtime", t7, t8);
         let mut this = Self {
             focus_handle: cx.focus_handle(),
             selector_focus_handle: cx.focus_handle(),
@@ -621,7 +640,7 @@ impl Ashell {
             sync_status: t!("sync_not_run").into(),
             sftp_path_input,
             ssh_auth_method: AuthMethod::Password,
-            ssh_config_entries: crate::session::ssh_config::parse_ssh_config().unwrap_or_default(),
+            ssh_config_entries,
             ssh_config_selected: None,
             editing_session_id: None,
             follow_system_theme,
@@ -711,7 +730,7 @@ impl Ashell {
             sftp_handles: std::collections::HashMap::new(),
 
             remote_sample_in_flight: false,
-            runtime: Runtime::new().expect("create tokio runtime"),
+            runtime,
             events_rx,
             events_tx,
             last_window_size: None,
@@ -727,6 +746,13 @@ impl Ashell {
         this.apply_theme_preferences(window, cx);
         // this.open_local(cx);
         this.start_event_pump(cx);
+        let t9 = Instant::now();
+        startup::startup_mark(
+            "Ashell::new: struct + theme prefs + event pump",
+            t8,
+            t9,
+        );
+        startup::startup_mark("Ashell::new: total", t0, t9);
         this
     }
 

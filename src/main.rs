@@ -24,8 +24,11 @@ pub(crate) use app::keybinding_recorder::{
 pub(crate) use app::{Ashell, PaneLayout, SelectorEntry, SftpContextMenuState, TabGroup};
 
 fn main() {
+    let t0 = std::time::Instant::now();
     app::startup::sync_macos_launch_environment();
+    let t1 = std::time::Instant::now();
     app::startup::init_logging();
+    app::startup::startup_mark("sync_macos_launch_environment", t0, t1);
 
     #[cfg(target_os = "macos")]
     let app = gpui_platform::application()
@@ -34,14 +37,20 @@ fn main() {
 
     #[cfg(not(target_os = "macos"))]
     let app = gpui_platform::application().with_assets(Assets);
+    app::startup::startup_mark("create application", t1, std::time::Instant::now());
 
     app.on_reopen(|cx| {
         if cx.windows().is_empty() {
             app::startup::open_main_window(cx);
         }
     });
+    let t2 = std::time::Instant::now();
     app.run(move |cx| {
+        let t3 = std::time::Instant::now();
+        app::startup::startup_mark("gpui platform init (until run callback)", t2, t3);
+
         gpui_component::init(cx);
+        let t4 = std::time::Instant::now();
         cx.bind_keys([
             KeyBinding::new(
                 "tab",
@@ -55,7 +64,16 @@ fn main() {
             ),
         ]);
         app::startup::bind_workspace_keys(cx);
+        let t5 = std::time::Instant::now();
         app::theme::load_embedded_themes(cx);
+        let t6 = std::time::Instant::now();
         app::startup::open_main_window(cx);
+        let t7 = std::time::Instant::now();
+        app::startup::startup_mark("gpui_component::init", t3, t4);
+        app::startup::startup_mark("bind_workspace_keys", t4, t5);
+        app::startup::startup_mark("load_embedded_themes", t5, t6);
+        app::startup::startup_mark("open_main_window", t6, t7);
+        app::startup::startup_mark("run callback total", t3, t7);
+        app::startup::startup_mark("total startup", t0, t7);
     });
 }
