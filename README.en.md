@@ -62,7 +62,6 @@ The current version provides a fully-featured GPUI-native workspace:
 - **Robust Terminal Emulator:** Parses terminal output with `alacritty_terminal`, supporting rich ANSI color spans, fast rendering, and complete keyboard input forwarding.
 - **System Telemetry:** Real-time visualization of CPU, memory, swap, network, and disk metrics in the left cockpit sidebar.
 - **Theming System:** Switch between multiple GPUI Component themes directly from the top toolbar.
-- **Embedded Fonts:** Uses embedded Maple Mono NF CN fonts out-of-the-box for excellent CJK character and Nerd Font icon support.
 - **v0.3 Core Enhancements:** Global font and font-size controls, concurrent SFTP transfers, persistent layout state, disconnect awareness, hot-swappable i18n, and smart terminal right-click copy/paste.
 
 ## Run

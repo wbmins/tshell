@@ -128,7 +128,6 @@ session: "Session"
 zombie: "Zombie"
 zombie_reason: "This transfer was interrupted because the application exited. The transfer task no longer exists."
 
-software_builtin: "Built-in"
 retry: "Retry"
 right_click_copy_paste: "Right-click Copy/Paste"
 keyword_highlight: "Terminal Keyword Highlighting"

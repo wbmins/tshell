@@ -313,6 +313,7 @@ pub fn default_ui_font_family() -> String {
 }
 
 fn default_terminal_font_family() -> String {
+    // Preferred system font family; it is no longer bundled with the app.
     "Maple Mono NF CN".to_string()
 }
 
@@ -692,6 +693,7 @@ impl ConfigStore {
 
     pub fn terminal_font_family(&self) -> &str {
         if self.cache.terminal_font_family.is_empty() {
+            // Preferred system font family; it is no longer bundled with the app.
             "Maple Mono NF CN"
         } else {
             &self.cache.terminal_font_family

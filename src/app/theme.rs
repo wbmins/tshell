@@ -1,4 +1,3 @@
-use anyhow::{Context as _, Result};
 use gpui::{App, Context, SharedString, Window, px};
 use gpui_component::{ActiveTheme as _, Theme, ThemeMode, ThemeRegistry};
 
@@ -11,32 +10,6 @@ pub(crate) const EMBEDDED_THEME_JSONS: &[&str] = &[
     include_str!("../../assets/themes/solarized.json"),
     include_str!("../../assets/themes/phygerr.json"),
 ];
-
-use std::sync::atomic::{AtomicBool, Ordering};
-
-pub(crate) static USING_SYSTEM_MAPLE: AtomicBool = AtomicBool::new(false);
-
-pub(crate) fn load_fonts(cx: &mut App) -> Result<()> {
-    let has_system_maple = cx
-        .text_system()
-        .all_font_names()
-        .contains(&"Maple Mono NF CN".to_string());
-    if has_system_maple {
-        USING_SYSTEM_MAPLE.store(true, Ordering::Relaxed);
-    } else {
-        let regular = std::borrow::Cow::Borrowed(
-            include_bytes!("../../assets/fonts/MapleMono-NF-CN-Regular.ttf").as_slice(),
-        );
-        let bold = std::borrow::Cow::Borrowed(
-            include_bytes!("../../assets/fonts/MapleMono-NF-CN-Bold.ttf").as_slice(),
-        );
-        cx.text_system()
-            .add_fonts(vec![regular, bold])
-            .context("load Maple Mono NF CN fonts")?;
-    }
-    set_theme_font_names(cx.global_mut::<Theme>(), ".SystemUIFont");
-    Ok(())
-}
 
 pub(crate) fn load_embedded_themes(cx: &mut App) {
     let registry = ThemeRegistry::global_mut(cx);
