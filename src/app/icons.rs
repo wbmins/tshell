@@ -15,7 +15,12 @@ impl RenderOnce for AshellIcon {
     }
 }
 
-const CUSTOM_ICON_PATHS: &[&str] = &["icons/file-down.svg", "icons/file-up.svg"];
+const CUSTOM_ICON_PATHS: &[&str] = &[
+    "icons/file-down.svg",
+    "icons/file-up.svg",
+    "icons/refresh-ccw.svg",
+    "icons/trash-2.svg",
+];
 
 /// Asset source serving the app's custom icons, falling back to
 /// gpui-component's default icon assets.
@@ -29,6 +34,12 @@ impl AssetSource for Assets {
                     include_bytes!("../../assets/custom-icons/file-down.svg")
                 }
                 "icons/file-up.svg" => include_bytes!("../../assets/custom-icons/file-up.svg"),
+                "icons/refresh-ccw.svg" => {
+                    include_bytes!("../../assets/custom-icons/refresh-ccw.svg")
+                }
+                "icons/trash-2.svg" => {
+                    include_bytes!("../../assets/custom-icons/trash-2.svg")
+                }
                 _ => unreachable!(),
             };
             return Ok(Some(Cow::Borrowed(bytes)));

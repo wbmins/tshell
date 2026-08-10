@@ -200,7 +200,6 @@ impl Ashell {
                 this.child(
                     Button::new("sftp-sync-cwd")
                         .ghost()
-                        .small()
                         .icon(IconName::SquareTerminal)
                         .label(t!("sync_cwd").to_string())
                         .tooltip(t!("sync_cwd_tooltip").to_string())
@@ -211,15 +210,12 @@ impl Ashell {
                 .child(
                     Button::new("sftp-refresh")
                         .ghost()
-                        .small()
-                        .icon(IconName::ArrowRight)
-                        .label(t!("refresh").to_string())
+                        .icon(AshellIcon::RefreshCcw)
                         .on_click(cx.listener(|this, _, _, cx| this.refresh_sftp(cx))),
                 )
                 .child(
                     Button::new("sftp-new-folder")
                         .ghost()
-                        .small()
                         .icon(IconName::Folder)
                         .label(t!("new_folder").to_string())
                         .on_click(cx.listener(|this, _, window, cx| {
@@ -234,7 +230,6 @@ impl Ashell {
                 .child(
                     Button::new("sftp-delete-selected")
                         .ghost()
-                        .small()
                         .icon(IconName::Close)
                         .label(if selected_entries.is_empty() {
                             t!("delete_selected").to_string()
@@ -253,9 +248,7 @@ impl Ashell {
                 .child(
                     Button::new("sftp-upload-file")
                         .ghost()
-                        .small()
                         .icon(AshellIcon::FileUp)
-                        .label(t!("upload_file").to_string())
                         .on_click(
                             cx.listener(|this, _, window, cx| this.upload_sftp_files(window, cx)),
                         ),
@@ -263,13 +256,7 @@ impl Ashell {
                 .child(
                     Button::new("sftp-download-selected")
                         .ghost()
-                        .small()
                         .icon(AshellIcon::FileDown)
-                        .label(if selected_entries.is_empty() {
-                            t!("download").to_string()
-                        } else {
-                            t!("download_count", count = selected_entries.len()).to_string()
-                        })
                         .disabled(selected_entries.is_empty())
                         .on_click(cx.listener(|this, _, window, cx| {
                             this.download_selected_sftp_entries(window, cx);
@@ -278,7 +265,6 @@ impl Ashell {
                 .child(
                     Button::new("sftp-show-hidden")
                         .ghost()
-                        .small()
                         .icon(if self.show_hidden_files {
                             IconName::Eye
                         } else {
@@ -1582,6 +1568,7 @@ impl Ashell {
                             .child(
                                 Button::new("sidebar-collapse-toggle")
                                     .ghost()
+                                    .large()
                                     .icon(IconName::PanelLeftClose)
                                     .tooltip(t!("settings_toggle_sidebar").to_string())
                                     .on_click(cx.listener(|this, _, _, cx| {
@@ -1594,6 +1581,7 @@ impl Ashell {
                             .child(
                                 Button::new("sidebar-settings")
                                     .ghost()
+                                    .large()
                                     .icon(IconName::Settings)
                                     .tooltip(t!("settings_open_settings").to_string())
                                     .on_click(cx.listener(|this, _, window, cx| {
@@ -1824,6 +1812,7 @@ impl Ashell {
                     .child(
                         Button::new("sidebar-expand-toggle")
                             .ghost()
+                            .large()
                             .icon(IconName::PanelLeftOpen)
                             .tooltip(t!("settings_toggle_sidebar").to_string())
                             .on_click(cx.listener(|this, _, _, cx| {
@@ -1845,6 +1834,7 @@ impl Ashell {
                     .child(
                         Button::new("sidebar-settings-collapsed")
                             .ghost()
+                            .large()
                             .icon(IconName::Settings)
                             .tooltip(t!("settings_open_settings").to_string())
                             .on_click(cx.listener(|this, _, window, cx| {
