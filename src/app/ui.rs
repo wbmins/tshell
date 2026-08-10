@@ -32,41 +32,228 @@ use crate::{
 
 impl Ashell {
     fn render_home_page(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let sessions = self.config.sessions().to_vec();
+        let active_session_id = self.active_session_id().map(ToOwned::to_owned);
+
         v_flex()
             .w_full()
             .h_full()
             .items_center()
             .justify_center()
-            .gap_4()
+            .pt(px(112.))
+            .pb_8()
+            .px_8()
+            // 顶部标题 + 提示文字，居中显示（保持原样的一小块）
             .child(
-                div()
-                    .text_size(rems(2.333))
-                    .font_weight(FontWeight::BOLD)
-                    .child("Ashell"),
-            )
-            .child(
-                div()
-                    .text_size(rems(1.083))
-                    .text_color(cx.theme().muted_foreground)
-                    .child(t!("open_local_or_ssh")),
-            )
-            .child(
-                h_flex()
-                    .gap_3()
+                v_flex()
+                    .items_center()
+                    .gap_2()
                     .child(
-                        Button::new("home-open-local")
-                            .primary()
-                            .label(t!("local_terminal").to_string())
-                            .on_click(cx.listener(|this, _, _, cx| this.open_local(cx))),
+                        div()
+                            .text_size(rems(2.333))
+                            .font_weight(FontWeight::BOLD)
+                            .child("Ashell"),
                     )
                     .child(
-                        Button::new("home-open-session")
-                            .ghost()
-                            .label(t!("open_session").to_string())
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.show_selector_dialog(window, cx)
-                            })),
+                        div()
+                            .text_size(rems(1.083))
+                            .text_color(cx.theme().muted_foreground)
+                            .child(t!("open_local_or_ssh")),
                     ),
+            )
+            // 会话列表区域：限制宽度并整体居中
+            .child(
+                v_flex()
+                    .w_full()
+                    .max_w(px(520.))
+                    .flex_1()
+                    .min_h(px(0.))
+                    .mt(px(60.))
+                    .gap_4()
+                    .when(sessions.is_empty(), |this| {
+                        this.child(
+                            v_flex()
+                                .flex_1()
+                                .items_center()
+                                .justify_center()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .text_size(rems(1.0))
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(t!("no_saved_sessions")),
+                                ),
+                        )
+                    })
+                    .when(!sessions.is_empty(), |this| {
+                        this.child(
+                            h_flex()
+                                .items_center()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .text_size(rems(1.0))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(cx.theme().primary)
+                                        .child(t!("saved")),
+                                )
+                                .child(
+                                    Button::new("home-add-ssh")
+                                        .primary()
+                                        .label(t!("add_ssh").to_string())
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.open_new_ssh_dialog(window, cx)
+                                        })),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .relative()
+                                .flex_1()
+                                .min_h(px(0.))
+                                .size_full()
+                                .child(
+                                    v_flex()
+                                        .size_full()
+                                        .id("home-sessions-scroll")
+                                        .track_scroll(&self.saved_scroll_handle)
+                                        .overflow_y_scroll()
+                                        .gap_2()
+                                        .children(sessions.into_iter().enumerate().map(
+                                            |(ix, session)| {
+                                                let connect_id = session.id.clone();
+                                                let edit_id = session.id.clone();
+                                                let delete_id = session.id.clone();
+                                                let is_active = active_session_id.as_deref()
+                                                    == Some(session.id.as_str());
+                                                let name = session.name.clone();
+                                                let detail = self.session_detail(&session);
+                                                div()
+                                                    .id(("home-saved-connect", ix))
+                                                    .w_full()
+                                                    .p_2()
+                                                    .rounded_md()
+                                                    .border_1()
+                                                    .border_color(if is_active {
+                                                        cx.theme().primary
+                                                    } else {
+                                                        cx.theme().border
+                                                    })
+                                                    .bg(if is_active {
+                                                        cx.theme().tab_active
+                                                    } else {
+                                                        cx.theme().muted
+                                                    })
+                                                    .cursor_pointer()
+                                                    .hover(|this| this.bg(cx.theme().secondary))
+                                                    .on_mouse_down(
+                                                        MouseButton::Left,
+                                                        cx.listener(move |this, _, _, cx| {
+                                                            this.connect_saved_session(
+                                                                connect_id.clone(),
+                                                                cx,
+                                                            )
+                                                        }),
+                                                    )
+                                                    .context_menu({
+                                                        let view = cx.entity();
+                                                        move |menu, window, _| {
+                                                            let edit_value = edit_id.clone();
+                                                            let clone_value = edit_id.clone();
+                                                            let delete_value = delete_id.clone();
+                                                            menu.item(
+                                                                PopupMenuItem::new(
+                                                                    t!("clone").to_string(),
+                                                                )
+                                                                .on_click(window.listener_for(
+                                                                    &view,
+                                                                    move |this, _, window, cx| {
+                                                                        this.clone_saved_session(
+                                                                            clone_value.clone(),
+                                                                            window,
+                                                                            cx,
+                                                                        )
+                                                                    },
+                                                                )),
+                                                            )
+                                                            .item(
+                                                                PopupMenuItem::new(
+                                                                    t!("edit").to_string(),
+                                                                )
+                                                                .on_click(window.listener_for(
+                                                                    &view,
+                                                                    move |this, _, window, cx| {
+                                                                        this.edit_saved_session(
+                                                                            edit_value.clone(),
+                                                                            window,
+                                                                            cx,
+                                                                        )
+                                                                    },
+                                                                )),
+                                                            )
+                                                            .item(
+                                                                PopupMenuItem::new(
+                                                                    t!("delete").to_string(),
+                                                                )
+                                                                .on_click(window.listener_for(
+                                                                    &view,
+                                                                    move |this, _, _, cx| {
+                                                                        this.remove_saved_session(
+                                                                            delete_value.clone(),
+                                                                            cx,
+                                                                        )
+                                                                    },
+                                                                )),
+                                                            )
+                                                        }
+                                                    })
+                                                    .child(
+                                                        v_flex()
+                                                            .gap_1()
+                                                            .child(
+                                                                div()
+                                                                    .text_size(rems(1.0))
+                                                                    .font_weight(
+                                                                        FontWeight::SEMIBOLD,
+                                                                    )
+                                                                    .child(name),
+                                                            )
+                                                            .child(
+                                                                div()
+                                                                    .text_size(rems(0.917))
+                                                                    .text_color(
+                                                                        cx.theme()
+                                                                            .muted_foreground,
+                                                                    )
+                                                                    .child(detail),
+                                                            ),
+                                                    )
+                                            },
+                                        )),
+                                )
+                                .child(
+                                    div()
+                                        .absolute()
+                                        .top_0()
+                                        .bottom_0()
+                                        .left_0()
+                                        .right_0()
+                                        .child(
+                                            gpui_component::scroll::Scrollbar::new(
+                                                &self.saved_scroll_handle,
+                                            )
+                                            .id("home-sessions-scrollbar")
+                                            .axis(
+                                                gpui_component::scroll::ScrollbarAxis::Vertical,
+                                            )
+                                            .scrollbar_show(
+                                                gpui_component::scroll::ScrollbarShow::Always,
+                                            ),
+                                        ),
+                                ),
+                        )
+                    }),
             )
     }
 
