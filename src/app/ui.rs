@@ -285,14 +285,22 @@ impl Ashell {
                         })),
                 )
                 .child(
-                    Checkbox::new("sftp-show-hidden")
+                    Button::new("sftp-show-hidden")
+                        .ghost()
                         .small()
-                        .label(t!("hidden").to_string())
-                        .checked(self.show_hidden_files)
-                        .tab_stop(false)
-                        .on_click(cx.listener(|this, checked, _, cx| {
-                            this.show_hidden_files = *checked;
-                            this.config.set_show_hidden_files(*checked);
+                        .icon(if self.show_hidden_files {
+                            IconName::Eye
+                        } else {
+                            IconName::EyeOff
+                        })
+                        .tooltip(if self.show_hidden_files {
+                            t!("hidden_files_visible").to_string()
+                        } else {
+                            t!("hidden_files_hidden").to_string()
+                        })
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.show_hidden_files = !this.show_hidden_files;
+                            this.config.set_show_hidden_files(this.show_hidden_files);
                             this.save_preferences_background();
                             cx.notify();
                         })),
