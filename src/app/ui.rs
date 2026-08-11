@@ -2130,15 +2130,28 @@ impl Ashell {
                                     active_session_id.as_deref() == Some(session.id.as_str());
                                 let name = session.name.clone();
 
-                                // Abbreviate: first 1 char for CJK, first 2 chars for Latin
+                                // Same OS-type logic as the home page list:
+                                // prefer the persisted OS type, fall back to the
+                                // in-memory runtime cache.
+                                let os_type = if session.os_type.is_empty() {
+                                    self.session_os_types
+                                        .get(&session.id)
+                                        .cloned()
+                                        .unwrap_or_default()
+                                } else {
+                                    session.os_type.clone()
+                                };
+                                let os_icon = os_icon_for_os(&os_type);
+                                let has_os_icon = os_icon.is_some();
+
+                                // Fallback abbreviation when no OS icon is known:
+                                // first 1 char for CJK, first 2 chars for Latin.
                                 let abbrev = {
                                     let mut chars = name.chars();
                                     if let Some(first) = chars.next() {
                                         if first > '\u{2E7F}' {
-                                            // CJK character range — show 1 char
                                             first.to_string()
                                         } else {
-                                            // Latin / ASCII — show first 2 chars
                                             let mut s = first.to_string();
                                             if let Some(second) = chars.next() {
                                                 s.push(second);
@@ -2243,7 +2256,14 @@ impl Ashell {
                                             } else {
                                                 cx.theme().foreground
                                             })
-                                            .child(abbrev),
+                                            .when_some(os_icon, |el, icon| {
+                                                el.child(
+                                                    Icon::new(icon)
+                                                        .size(px(22.))
+                                                        .text_color(cx.theme().muted_foreground),
+                                                )
+                                            })
+                                            .when(!has_os_icon, |el| el.child(abbrev)),
                                     )
                             })),
                     )
