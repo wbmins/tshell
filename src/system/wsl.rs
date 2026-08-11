@@ -18,14 +18,7 @@ pub struct WslDistro {
 /// On non-Windows platforms this always returns an empty vec.
 #[cfg(target_os = "windows")]
 pub fn list_wsl_distros() -> Vec<WslDistro> {
-    let t_start = std::time::Instant::now();
-    let distros = list_wsl_distros_from_registry().unwrap_or_default();
-    tracing::info!(
-        "[wsl] list_wsl_distros: registry took {:.1}ms, found {} distros",
-        t_start.elapsed().as_millis(),
-        distros.len()
-    );
-    distros
+    list_wsl_distros_from_registry().unwrap_or_default()
 }
 
 /// Reads installed WSL distro names from the Windows registry.

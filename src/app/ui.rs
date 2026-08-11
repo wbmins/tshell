@@ -1,9 +1,11 @@
+use std::time::Duration;
+
 use crate::app::resizable::{h_resizable, resizable_panel, v_resizable};
 use gpui::{
-    Context, ElementId, Focusable as _, FontWeight, Hsla, InteractiveElement as _, IntoElement,
-    MouseButton, MouseDownEvent, ParentElement as _, PathBuilder, Pixels, Render,
-    StatefulInteractiveElement as _, Styled as _, Window, canvas, div, hsla, point,
-    prelude::FluentBuilder as _, px, relative, rems, uniform_list,
+    Animation, AnimationExt as _, Context, ElementId, Focusable as _, FontWeight, Hsla,
+    InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, ParentElement as _,
+    PathBuilder, Pixels, Render, StatefulInteractiveElement as _, Styled as _, Window, canvas,
+    div, hsla, point, prelude::FluentBuilder as _, px, relative, rems, uniform_list,
 };
 use gpui_component::{
     ActiveTheme, Disableable as _, ElementExt, Icon, IconName, InteractiveElementExt as _, Root,
@@ -41,6 +43,29 @@ fn os_icon_for_os(os: &str) -> Option<AshellIcon> {
         "postmarketos" => Some(AshellIcon::PostmarketosIcon),
         _ => None,
     }
+}
+
+/// Braille frames used for the "docker-style" loading spinner.
+const SPINNER_FRAMES: [char; 10] = [
+    '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏',
+];
+
+/// A slow, frame-by-frame Braille spinner (like a docker image pull).
+/// `duration` is the time for one full rotation; frames advance smoothly.
+fn braille_spinner(duration: Duration, color: Hsla) -> impl IntoElement {
+    div()
+        .id("braille-connect-spinner")
+        .text_size(rems(1.5))
+        .text_color(color)
+        .with_animation(
+            "braille-connect-spin",
+            Animation::new(duration).repeat(),
+            move |this, delta| {
+                let idx = ((delta * SPINNER_FRAMES.len() as f32) as usize)
+                    .min(SPINNER_FRAMES.len() - 1);
+                this.child(SPINNER_FRAMES[idx].to_string())
+            },
+        )
 }
 
 impl Ashell {
@@ -3258,10 +3283,21 @@ impl Render for Ashell {
                                     v_flex()
                                         .gap_4()
                                         .child(
-                                            Button::new("ssh-connect-progress")
-                                                .primary()
-                                                .loading(!progress.failed)
-                                                .label(progress.title.clone()),
+                                            h_flex()
+                                                .items_center()
+                                                .gap_3()
+                                                .child(
+                                                    div()
+                                                        .text_size(rems(1.25))
+                                                        .font_weight(FontWeight::SEMIBOLD)
+                                                        .child(progress.title.clone()),
+                                                )
+                                                .when(!progress.failed, |this| {
+                                                    this.child(braille_spinner(
+                                                        Duration::from_millis(900),
+                                                        cx.theme().primary,
+                                                    ))
+                                                }),
                                         )
                                         .child(
                                             div()

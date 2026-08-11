@@ -491,38 +491,23 @@ impl Ashell {
 
     pub(crate) fn scan_wsl_distros(&mut self, cx: &mut Context<Self>) {
         if self.wsl_scanning {
-            tracing::info!("[wsl] scan_wsl_distros: skip, already scanning");
             return;
         }
-        let t_start = std::time::Instant::now();
         self.wsl_scanning = true;
         cx.notify();
-        tracing::info!("[wsl] scan_wsl_distros: started");
 
         let weak = cx.weak_entity();
         cx.spawn(async move |_this, cx| {
-            let t_spawn = std::time::Instant::now();
             let names = cx
                 .background_executor()
                 .spawn(async move {
-                    let t_exec = std::time::Instant::now();
-                    let names = crate::system::wsl::list_wsl_distros()
+                    crate::system::wsl::list_wsl_distros()
                         .into_iter()
                         .map(|d| d.name)
-                        .collect::<Vec<String>>();
-                    tracing::info!(
-                        "[wsl] scan_wsl_distros: list_wsl_distros took {:.1}ms",
-                        t_exec.elapsed().as_millis()
-                    );
-                    names
+                        .collect::<Vec<String>>()
                 })
                 .await;
-            tracing::info!(
-                "[wsl] scan_wsl_distros: cx.spawn->bg_executor dispatch took {:.1}ms (list itself excluded)",
-                t_spawn.elapsed().as_millis()
-            );
 
-            let t_update = std::time::Instant::now();
             let _ = weak.update(cx, |this, cx| {
                 this.wsl_distros = names;
                 this.wsl_scanning = false;
@@ -531,14 +516,6 @@ impl Ashell {
                 }
                 cx.notify();
             });
-            tracing::info!(
-                "[wsl] scan_wsl_distros: weak.update took {:.1}ms",
-                t_update.elapsed().as_millis()
-            );
-            tracing::info!(
-                "[wsl] scan_wsl_distros: total took {:.1}ms",
-                t_start.elapsed().as_millis()
-            );
             Ok::<(), anyhow::Error>(())
         })
         .detach();
