@@ -1,6 +1,6 @@
 use std::{
     io::{Read, Write},
-    sync::mpsc::{self, Sender},
+    sync::{Arc, Condvar, Mutex, mpsc::{self, Sender}},
     thread,
 };
 
@@ -30,9 +30,9 @@ pub fn spawn_local_terminal(
 /// Spawn a WSL terminal that drops directly into a specific installed distro.
 ///
 /// WSL's first launch can be slow (cold start of the distro). We therefore
-/// report "connected" only once the WSL shell emits its first output, so the
-/// UI keeps showing the connection progress overlay until WSL is actually
-/// ready.
+/// delay the "connected" signal until the WSL shell has gone idle (stopped
+/// emitting output for a short while), so the UI connection-progress overlay
+/// stays visible until the shell is actually ready for input.
 pub fn spawn_wsl_terminal(
     tab_id: String,
     cols: u16,
@@ -57,7 +57,7 @@ fn spawn_pty_command(
     events: Sender<BackendEvent>,
     mut cmd: CommandBuilder,
     status_text: &'static str,
-    connected_on_output: bool,
+    connected_on_idle: bool,
 ) -> Result<BackendTx> {
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -100,24 +100,28 @@ fn spawn_pty_command(
     let mut writer = master.take_writer().context("take PTY writer")?;
     let (cmd_tx, cmd_rx) = mpsc::channel::<BackendCommand>();
 
+    // Shared `(last output time, has any output arrived)` used to detect when
+    // the WSL shell has gone idle (i.e. is waiting for input), which is when
+    // it's truly ready. We use a Condvar so the idle watcher is event-driven
+    // (notified on new output) rather than polling in a loop.
+    let output_state: Arc<(Mutex<(std::time::Instant, bool)>, Condvar)> =
+        Arc::new((Mutex::new((std::time::Instant::now(), false)), Condvar::new()));
+
     let read_tab = tab_id.clone();
     let read_events = events.clone();
-    let notify_connected = connected_on_output;
+    let read_output_state = output_state.clone();
     thread::spawn(move || {
         let mut buf = [0u8; 8192];
-        // When `notify_connected` is set (WSL), we report "connected" only on
-        // the first chunk of output so the connection progress overlay stays
-        // visible during a slow WSL cold start.
-        let mut connected_sent = !notify_connected;
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    if !connected_sent {
-                        connected_sent = true;
-                        let _ = read_events.send(BackendEvent::Connected {
-                            tab_id: read_tab.clone(),
-                        });
+                    {
+                        let (lock, cv) = &*read_output_state;
+                        let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+                        guard.0 = std::time::Instant::now();
+                        guard.1 = true;
+                        cv.notify_all();
                     }
                     let _ = read_events.send(BackendEvent::Output {
                         tab_id: read_tab.clone(),
@@ -138,6 +142,38 @@ fn spawn_pty_command(
             reason: "local shell closed".into(),
         });
     });
+
+    // For WSL, report "connected" once the shell has gone idle: some output
+    // has been produced and no new output has arrived for IDLE_MS. This keeps
+    // the connection-progress overlay visible through the (potentially slow)
+    // WSL cold start, until the shell prompt is actually ready.
+    //
+    // Event-driven: the watcher sleeps on the Condvar and is woken up either
+    // by new output (which resets the idle timer) or by an IDLE_MS timeout
+    // (which means the shell is idle and ready).
+    if connected_on_idle {
+        const IDLE_MS: u64 = 700;
+        let idle_tab = tab_id.clone();
+        let idle_events = events.clone();
+        let idle_output_state = output_state.clone();
+        thread::spawn(move || loop {
+            let (lock, cv) = &*idle_output_state;
+            let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+            // Sleep until either new output arrives (notify) or we've waited a
+            // full IDLE_MS with no output (timeout).
+            let (guard, _timeout) = cv
+                .wait_timeout(guard, std::time::Duration::from_millis(IDLE_MS))
+                .unwrap_or_else(|poison| poison.into_inner());
+            let (has_output, idle_ms) = (guard.1, guard.0.elapsed().as_millis());
+            if has_output && idle_ms as u64 >= IDLE_MS {
+                let _ = idle_events.send(BackendEvent::Connected {
+                    tab_id: idle_tab.clone(),
+                });
+                return;
+            }
+            // New output arrived (or not yet any output): loop and keep waiting.
+        });
+    }
 
     let write_tab = tab_id.clone();
     let write_events = events.clone();
@@ -188,9 +224,9 @@ fn spawn_pty_command(
 
     // For local terminals the PTY is up as soon as the child spawned, so we
     // report "connected" immediately. For WSL, "connected" is sent later from
-    // the reader thread once the WSL shell emits its first output (see above),
-    // keeping the connection-progress overlay visible during a cold start.
-    if !connected_on_output {
+    // the idle watcher thread once the WSL shell has gone idle (see above),
+    // keeping the connection-progress overlay visible through the cold start.
+    if !connected_on_idle {
         let _ = events.send(BackendEvent::Connected { tab_id });
     }
 
