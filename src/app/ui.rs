@@ -1828,7 +1828,7 @@ impl Ashell {
                             .child(
                                 Button::new("sidebar-collapse-toggle")
                                     .ghost()
-                                    .large()
+                                    .with_size(Size::Size(px(30.)))
                                     .icon(IconName::PanelLeftClose)
                                     .tooltip(t!("settings_toggle_sidebar").to_string())
                                     .on_click(cx.listener(|this, _, _, cx| {
@@ -1841,7 +1841,7 @@ impl Ashell {
                             .child(
                                 Button::new("sidebar-settings")
                                     .ghost()
-                                    .large()
+                                    .with_size(Size::Size(px(30.)))
                                     .icon(IconName::Settings)
                                     .tooltip(t!("settings_open_settings").to_string())
                                     .on_click(cx.listener(|this, _, window, cx| {
@@ -2101,7 +2101,7 @@ impl Ashell {
                     .child(
                         Button::new("sidebar-settings-collapsed")
                             .ghost()
-                            .large()
+                            .with_size(Size::Size(px(30.)))
                             .icon(IconName::Settings)
                             .tooltip(t!("settings_open_settings").to_string())
                             .on_click(cx.listener(|this, _, window, cx| {
