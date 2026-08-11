@@ -163,6 +163,10 @@ impl Ashell {
                                 .when(is_wsl, |this| {
                                     let wsl_distros = view.read(cx).wsl_distros.clone();
                                     let wsl_scanning = view.read(cx).wsl_scanning;
+                                    // When editing an existing WSL session the
+                                    // distro name is locked; only the session
+                                    // name can be changed.
+                                    let is_editing = view.read(cx).editing_session_id.is_some();
                                     this.child(
                                         v_flex()
                                             .gap_1()
@@ -173,9 +177,9 @@ impl Ashell {
                                         v_flex()
                                             .gap_1()
                                             .child(div().text_sm().text_color(cx.theme().muted_foreground).child(t!("wsl_distro").to_string()))
-                                            .child(Input::new(&host_input).tab_index(1))
+                                            .child(Input::new(&host_input).tab_index(1).disabled(is_editing))
                                     )
-                                    .when(wsl_scanning, |el| {
+                                    .when(!is_editing && wsl_scanning, |el| {
                                         el.child(
                                             div()
                                                 .text_sm()
@@ -183,7 +187,7 @@ impl Ashell {
                                                 .child(t!("scanning_wsl").to_string()),
                                         )
                                     })
-                                    .when(!wsl_scanning && !wsl_distros.is_empty(), |el| {
+                                    .when(!is_editing && !wsl_scanning && !wsl_distros.is_empty(), |el| {
                                         let theme = cx.theme();
                                         el.child(
                                             div()
@@ -219,7 +223,7 @@ impl Ashell {
                                                 )),
                                         )
                                     })
-                                    .when(!wsl_scanning && wsl_distros.is_empty(), |el| {
+                                    .when(!is_editing && !wsl_scanning && wsl_distros.is_empty(), |el| {
                                         el.child(
                                             div()
                                                 .text_sm()
